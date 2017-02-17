@@ -160,7 +160,7 @@ TextInput = Object.subClass({
 		
 		// Find the element which we calculate scroll offsets from
 		// For now just decide by browser
-		self.scrollParent = $.browser.webkit ? $body : $( 'html' );
+		self.scrollParent = /webkit/i.test( navigator.userAgent ) ? $body : $( 'html' );
 	},
 	
 	// Cleanup so we can deconstruct
@@ -188,6 +188,9 @@ TextInput = Object.subClass({
 		var laststruct = order.target.children().last(),
 		input = this.input,
 		prompt;
+		
+		// Trigger a custom event for anyone listening in for commands
+		$doc.trigger({ type: 'RequestingTextInput' });
 		
 		this.order = order;
 		this.mode = 'line';
@@ -274,6 +277,9 @@ TextInput = Object.subClass({
 	{
 		this.order = order;
 		this.mode = 'char';
+		
+		// Trigger a custom event for anyone listening in for commands
+		$doc.trigger({ type: 'RequestingTextInput' });
 		
 		this.keyCode = this.charCode = 0;
 		

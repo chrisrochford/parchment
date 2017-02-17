@@ -3,9 +3,9 @@
 Text grid (ie, status) windows
 ==============================
 
-Copyright (c) 2012 The Parchment Contributors
+Copyright (c) 2016 The Parchment Contributors
 BSD licenced
-http://code.google.com/p/parchment
+https://github.com/curiousdannii/parchment
 
 */
 
@@ -35,21 +35,56 @@ var TextGrid = Object.subClass({
 		this.lines = [];
 		this.styles = [];
 		this.cursor = [0, 0]; // row, col
+		
+		// Change the window's height to what is meant to be seen before an input event
+		// Based on Zarf's algorithm from http://eblong.com/zarf/glk/quote-box.html
+		// But instead of a maxheight variable, use lines.length directly
+		this.vmheight = 0; // What the VM thinks the height is
+		this.seenheight = 0; // Height the player saw last
+		$doc.on( 'RequestingTextInput', function( e )
+		{
+			// If the player has seen the entire window we can shrink it
+			if ( self.seenheight === self.lines.length )
+			{
+				self.lines.length = self.vmheight;
+				// Update the HTML
+				self.write();
+			}
+			self.seenheight = self.lines.length;
+		});
 	},
 	
 	// Accept a stream of text grid orders
 	stream: function( orders )
 	{
 		var order, code, i, j,
-		elem = this.elem,
+		self = this,
 		row = this.cursor[0],
 		col = this.cursor[1],
 		lines = this.lines,
 		styles = this.styles,
-		env = this.io.env,
-		line, text, temp,
-		stylecode,
-		oldheight = lines.length;
+		width = this.io.env.width,
+		text, temp,
+		stylecode;
+		
+		// Add a blank line or erase an existing one
+		function addOrEraseLine( row )
+		{
+			// Keep vmheight up to date
+			if ( typeof row === 'undefined' )
+			{
+				self.vmheight++;
+			}
+			var line = [],
+			i = 0;
+			row = row || lines.length;
+			while ( i++ < width )
+			{
+				line.push( ' ' );
+			}
+			lines[row] = line;
+			styles[row] = Array( width );
+		}
 		
 		// Process the orders
 		for ( i = 0; i < orders.length; i++ )
@@ -60,46 +95,28 @@ var TextGrid = Object.subClass({
 			// Adjust the height of the grid
 			if ( code == 'height' )
 			{
-				// Increase the height
-				while ( order.lines > lines.length )
+				// We handle an order of 0 specially so that it won't preserve previous turn's lines
+				if ( order.lines === 0 )
 				{
-					this.addline();
+					lines.length = 0;
+					this.vmheight = 0;
 				}
 				
-				// Decrease the height, and handle box quotations
-				if ( order.lines < lines.length )
+				// If the VM thinks it is enlarging the window but the rows already exist, erase them
+				if ( lines.length > order.lines )
 				{
-					if ( order.lines != 0 )
+					j = this.vmheight;
+					while ( j < order.lines )
 					{
-						// Fix bad heights (that would split a multi-line status) by increasing the requested height to the first blank line
-						while ( order.lines < lines.length && /\S/.test( lines[order.lines].join( '' ) ) )
-						{
-							order.lines++;
-						}
-					
-						// Add the floating box
-						temp = $( '<div>' )
-							.addClass( 'box' )
-							.prependTo( this.io.target );
-						// Position it where it would have been if it was part of the grid
-						// Scroll to the bottom just in case
-						window.scrollTo( 0, 9e9 );
-						temp.css({
-							top: $window.scrollTop() + this.lineheight * order.lines,
-							// Account for .main's added 1px padding
-							left: temp.offset().left - 1
-						});
-						// Fill it with the lines we'll be removing
-						this.write( temp, lines.slice( order.lines ), styles.slice( order.lines ) );
+						addOrEraseLine( j++ );
 					}
+					this.vmheight = order.lines;
+				}
 				
-					lines.length = order.lines;
-					styles.length = order.lines;
-					if ( row > order.lines - 1 )
-					{
-						row = 0;
-						col = 0;
-					}
+				// Increase the window height to the requested height
+				while ( order.lines > lines.length )
+				{
+					addOrEraseLine();
 				}
 			}
 			
@@ -109,14 +126,14 @@ var TextGrid = Object.subClass({
 				j = 0;
 				while ( j < lines.length )
 				{
-					this.addline( j++ );
+					addOrEraseLine( j++ );
 				}
 				row = 0;
 				col = 0;
 			}
 			
 			// Set the cursor position
-			// Not that our coordinates are -1 compared to the Z-Machine
+			// Note that our coordinates are -1 compared to the Z-Machine
 			if ( code == 'cursor' )
 			{
 				row = order.to[0];
@@ -135,7 +152,7 @@ var TextGrid = Object.subClass({
 				// Add a row(s) if needed
 				while ( row >= lines.length )
 				{
-					this.addline();
+					addOrEraseLine();
 				}
 			}
 			
@@ -151,7 +168,7 @@ var TextGrid = Object.subClass({
 				// Add a row(s) if needed
 				while ( row >= lines.length )
 				{
-					this.addline();
+					addOrEraseLine();
 				}
 				
 				// Calculate the style attribute for this set of text
@@ -159,7 +176,7 @@ var TextGrid = Object.subClass({
 				if ( order.props )
 				{
 					temp = $( '<tt>', order.props )
-						.appendTo( elem );
+						.appendTo( this.elem );
 					
 					text = temp.attr( 'style' );
 					if ( text )
@@ -191,7 +208,7 @@ var TextGrid = Object.subClass({
 						styles[row][col++] = stylecode;
 					}
 					// New line, or end of a line
-					if ( temp == '\r' || col == env.width )
+					if ( temp == '\r' || col == width )
 					{
 						row++;
 						col = 0;
@@ -199,7 +216,7 @@ var TextGrid = Object.subClass({
 						// Add a row if needed, ie. we must still have text to go
 						if ( row >= lines.length && j < text.length )
 						{
-							this.addline();
+							addOrEraseLine();
 						}
 					}
 				}
@@ -207,7 +224,7 @@ var TextGrid = Object.subClass({
 			
 			if ( code == 'eraseline' )
 			{
-				for ( j = col; j < env.width; j++ )
+				for ( j = col; j < width; j++ )
 				{
 					lines[row][j] = ' ';
 					styles[row][j] = undefined;
@@ -219,21 +236,16 @@ var TextGrid = Object.subClass({
 		this.cursor = [row, col];
 		
 		// Update the HTML
-		this.write( elem, lines, styles );
-		
-		// Try to adjust the main window's padding - for now guess what the window's class is
-		if ( lines.length != oldheight )
-		{
-			$( '.main' )
-				.css( 'padding-top', elem.height() );
-		}
+		this.write();
 	},
 	
 	// Update the HTML
-	write: function( elem, lines, styles )
+	write: function()
 	{
 		var result = '',
 		i = 0, j,
+		lines = this.lines,
+		styles = this.styles,
 		text,
 		style;
 		
@@ -261,21 +273,9 @@ var TextGrid = Object.subClass({
 				result += '<br>';
 			}
 		}
-		elem.html( result );
-	},
-	
-	// Add a blank line
-	addline: function( row )
-	{
-		var width = this.io.env.width,
-		line = [],
-		i = 0;
-		row = row || this.lines.length;
-		while ( i++ < width )
-		{
-			line.push( ' ' );
-		}
-		this.lines[row] = line;
-		this.styles[row] = Array( width );
+		this.elem.html( result );
+		
+		// Try to adjust the main window's padding - for now guess what the window's class is
+		$( '.main' ).css( 'padding-top', this.elem.height() );
 	}
 });

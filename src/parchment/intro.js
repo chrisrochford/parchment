@@ -3,7 +3,7 @@
 Parchment
 =========
 
-Copyright (c) 2013 The Parchment Contributors
+Copyright (c) 2015 The Parchment Contributors
 BSD licenced
 https://github.com/curiousdannii/parchment
 
@@ -61,10 +61,10 @@ window.parchment = {
 		page_title: 1,
 		
 		// Front page panels to display if no default story
-		panels: [ 'search', 'url', 'about' ],
+		panels: [ 'ifdb', 'url', 'about' ],
 		
 		// URL of proxy server to use for files we can't directly load
-		proxy_url: 'http://zcode.appspot.com/proxy/'
+		proxy_url: 'https://zcode.appspot.com/proxy/'
 	},
 
 	// Classes etc
